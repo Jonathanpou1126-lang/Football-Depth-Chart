@@ -5,7 +5,7 @@ A fast, single-page coaching board for managing an 11U football depth chart. It 
 ## Features
 
 - 22-player starter roster
-- 25 three-deep starter positions across Offense, Defense, and Special Teams
+- 22 three-deep Offense/Defense positions plus five independent 11-position Special Teams units
 - Desktop drag-and-drop and phone/tablet tap-to-assign
 - Side-specific available-player pools that hide players already assigned on the current side
 - Earlier/later controls for reordering positions within each side
@@ -20,9 +20,9 @@ A fast, single-page coaching board for managing an 11U football depth chart. It 
 
 Open `index.html` in a current browser, or serve this folder with any static web server. No build or backend is required. The spreadsheet reader in `vendor/` is bundled locally, so spreadsheet data is not uploaded anywhere.
 
-Choose **All**, **Offense**, **Defense**, or **Special Teams**. On a phone or tablet, tap a player and then tap any open or occupied depth slot. The selected player is visibly highlighted. On desktop, use the same click flow or drag a roster player onto a slot. Use the **×** beside an occupied slot to clear it.
+Choose **All**, **Offense**, **Defense**, or **Special Teams**. Special Teams has separate tabs for **Punt**, **Punt Return**, **Kickoff**, **Kick Return**, and **Extra Point**, plus an All Units view. On a phone or tablet, tap a player and then tap any open or occupied depth slot. The selected player is visibly highlighted. On desktop, use the same click flow or drag a roster player onto a slot. Use the **×** beside an occupied slot to clear it.
 
-The roster is an available-player pool for the selected view. Once a player is assigned on Offense, that player leaves the Offense list but remains available when you switch to Defense or Special Teams. To use that player at another position on the same side, tap the **↗ use again** button beside the player's occupied slot (or tap the occupied slot itself), then tap the additional slot. On desktop, you can also drag the occupied slot onto another position. The first assignment remains in place. Clearing the player's final assignment on that side returns the player to that side's roster. In the **All** view, players assigned anywhere are hidden from the available list.
+The roster is an available-player pool for the selected view. Once a player is assigned on Offense, that player leaves the Offense list but remains available when you switch to Defense or Special Teams. Each Special Teams unit has its own pool, so assigning a player to Punt does not remove that player from Kickoff or any other unit. To use that player at another position in the same chart, tap the **↗ use again** button beside the player's occupied slot (or tap the occupied slot itself), then tap the additional slot. On desktop, you can also drag the occupied slot onto another position. The first assignment remains in place. In the **All** view, players assigned anywhere are hidden from the available list.
 
 A player can appear at multiple positions on Offense, Defense, and Special Teams—for example, first team at one position and second team at another. Assigning the same player to another slot within one position moves the player and prevents a duplicate in that single position.
 
@@ -38,9 +38,11 @@ An Excel workbook can contain:
 
 ### Positions sheet
 
-| Position | Side | Depth | Notes |
-| --- | --- | --- | --- |
-| QB | Offense | 3 | Optional note |
+| Position | Side | Unit | Depth | Notes |
+| --- | --- | --- | --- | --- |
+| QB | Offense |  | 3 | Optional note |
+
+The Positions sheet can also include an optional **Unit** column. For Special Teams rows, valid Unit values are `Punt`, `Punt Return`, `Kickoff`, `Kick Return`, and `Extra Point`. A blank or unrecognized Special Teams Unit defaults to Punt. Offense and Defense rows leave Unit blank.
 
 Valid **Side** values are `Offense`, `Defense`, and `Special Teams`. Depth must be 1 through 6; blank depth defaults to 3. Position names retain their entered spelling, capitalization, and punctuation.
 
@@ -66,7 +68,7 @@ Choose **Tools → Download Template** for an `.xlsx` workbook with Positions, R
 
 **Tools → Export JSON Backup** downloads roster, positions, assignments, selected side, List/Field choice, and saved field arrangements. **Restore JSON Backup** validates and restores that full state. Use a backup to move the chart to another browser or device.
 
-Select the desired side and choose the visible **Print** button or **Tools → Print Depth Chart**. Printing follows the selected layout. List View prints the traditional full depth chart. Field View prints the on-field formation followed by a compact 1st-through-6th depth list for every position. Controls and the roster are removed automatically, and **All** prints each side on its own landscape page. The browser's print window can send the chart to a printer or save it as a PDF.
+Select the desired side or Special Teams unit and choose the visible **Print** button or **Tools → Print Depth Chart**. Printing follows the selected layout. List View prints the traditional full depth chart. Field View prints the on-field formation followed by a compact 1st-through-6th depth list for every position. Controls and the roster are removed automatically. **All Units** prints each Special Teams unit separately, while **All** prints Offense, Defense, and all five units on separate landscape pages. The browser's print window can send the chart to a printer or save it as a PDF.
 
 ## GitHub Pages
 

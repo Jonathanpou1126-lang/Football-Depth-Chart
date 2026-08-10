@@ -3,6 +3,8 @@
   const KEY = "football-depth-chart-11u-v1";
   const SIDES = ["Offense", "Defense", "Special Teams"];
   const VIEWS = ["All", ...SIDES];
+  const SPECIAL_UNITS = ["Punt", "Punt Return", "Kickoff", "Kick Return", "Extra Point"];
+  const SPECIAL_UNIT_VIEWS = ["All Units", ...SPECIAL_UNITS];
   const rosterDefaults = [
     ["0", "Dustin Juarez Zarco"], ["1", "Harrison Edwards"], ["2", "Jesiah Baker"],
     ["3", "Jayden Long"], ["5", "Jackson Owens"], ["6", "Jacob Johnson"],
@@ -16,7 +18,13 @@
   const positionDefaults = {
     Offense: ["1 Back", "2 Back", "3 Back", "4 Back", "X (RTE)", "Y (LTE)", "LT", "LG", "C", "RG", "RT"],
     Defense: ["LC", "RC", "FS", "SAM", "MIKE", "WILL", "LDE", "LDT", "N", "RDT", "RDE"],
-    "Special Teams": ["PUNTER", "PAT", "KO"],
+  };
+  const specialTeamDefaults = {
+    Punt: ["PUNTER", "LS", "PP", "L1", "L2", "L3", "L4", "R1", "R2", "R3", "R4"],
+    "Punt Return": ["RETURNER", "L1", "L2", "L3", "L4", "L5", "R1", "R2", "R3", "R4", "R5"],
+    Kickoff: ["KO", "L1", "L2", "L3", "L4", "L5", "R1", "R2", "R3", "R4", "R5"],
+    "Kick Return": ["KR-L", "KR-R", "M", "L1", "L2", "L3", "L4", "R1", "R2", "R3", "R4"],
+    "Extra Point": ["PAT", "HOLDER", "LS", "LT", "LG", "C", "RG", "RT", "LW", "RW", "PP"],
   };
   const fieldDefaults = {
     Offense: {
@@ -27,7 +35,13 @@
       LC: [10, 22], RC: [90, 22], FS: [50, 10], SAM: [30, 36], MIKE: [50, 36], WILL: [70, 36],
       LDE: [22, 55], LDT: [36, 55], N: [50, 55], RDT: [64, 55], RDE: [78, 55],
     },
-    "Special Teams": { PUNTER: [50, 72], PAT: [40, 45], KO: [60, 45] },
+  };
+  const specialFieldDefaults = {
+    Punt: { PUNTER: [50, 84], LS: [50, 50], PP: [50, 68], L1: [10, 42], L2: [26, 50], L3: [36, 50], L4: [44, 50], R1: [90, 42], R2: [74, 50], R3: [64, 50], R4: [56, 50] },
+    "Punt Return": { RETURNER: [50, 84], L1: [10, 34], L2: [22, 48], L3: [34, 48], L4: [42, 58], L5: [46, 68], R1: [90, 34], R2: [78, 48], R3: [66, 48], R4: [58, 58], R5: [54, 68] },
+    Kickoff: { KO: [50, 82], L1: [12, 45], L2: [28, 45], L3: [40, 45], L4: [46, 58], L5: [48, 68], R1: [88, 45], R2: [72, 45], R3: [60, 45], R4: [54, 58], R5: [52, 68] },
+    "Kick Return": { "KR-L": [38, 84], "KR-R": [62, 84], M: [50, 68], L1: [12, 38], L2: [26, 48], L3: [38, 57], L4: [44, 68], R1: [88, 38], R2: [74, 48], R3: [62, 57], R4: [56, 68] },
+    "Extra Point": { PAT: [50, 84], HOLDER: [50, 70], LS: [50, 50], LT: [26, 50], LG: [38, 50], C: [50, 42], RG: [62, 50], RT: [74, 50], LW: [12, 42], RW: [88, 42], PP: [50, 60] },
   };
   const $ = (selector) => document.querySelector(selector);
   const els = {
@@ -38,9 +52,10 @@
     playerForm: $("#playerForm"), playerName: $("#playerName"), playerJersey: $("#playerJersey"),
     playerNotes: $("#playerNotes"), positionDialog: $("#positionDialog"), positionForm: $("#positionForm"),
     positionId: $("#positionId"), positionName: $("#positionName"), positionSide: $("#positionSide"),
-    positionDepth: $("#positionDepth"), positionNotes: $("#positionNotes"), dialogTitle: $("#positionDialogTitle"),
+    positionUnit: $("#positionUnit"), positionUnitLabel: $("#positionUnitLabel"), positionDepth: $("#positionDepth"), positionNotes: $("#positionNotes"), dialogTitle: $("#positionDialogTitle"),
     savePosition: $("#savePositionButton"), spreadsheetInput: $("#spreadsheetInput"), backupInput: $("#backupInput"),
-    toast: $("#toast"), layoutButtons: [...document.querySelectorAll("[data-layout]")],
+    toast: $("#toast"), layoutButtons: [...document.querySelectorAll("[data-layout]")], specialUnitTabs: $("#specialUnitTabs"),
+    specialUnitButtons: [...document.querySelectorAll("[data-special-unit]")],
   };
   let selectedPlayerId = null;
   let selectedFieldPositionId = null;
@@ -59,6 +74,16 @@
     const clean = String(value ?? "").trim().toLowerCase();
     return SIDES.find((side) => side.toLowerCase() === clean) || null;
   }
+  function specialUnitValue(value, positionName = "") {
+    const clean = String(value ?? "").trim().toLowerCase();
+    const exact = SPECIAL_UNITS.find((unit) => unit.toLowerCase() === clean);
+    if (exact) return exact;
+    const name = String(positionName).trim().toUpperCase();
+    if (name === "KO") return "Kickoff";
+    if (name === "PAT") return "Extra Point";
+    if (name.includes("RETURN")) return name.includes("PUNT") ? "Punt Return" : "Kick Return";
+    return "Punt";
+  }
   function depthValue(value, blankIsThree = false) {
     if (blankIsThree && String(value ?? "").trim() === "") return 3;
     const depth = Number.parseInt(String(value), 10);
@@ -66,10 +91,13 @@
   }
   function defaultState() {
     const roster = rosterDefaults.map(([jersey, name], index) => ({ id: `player-${index + 1}-${slug(name)}`, jersey, name, notes: "" }));
-    const positions = SIDES.flatMap((side) => positionDefaults[side].map((name, index) => ({
-      id: `${slug(side)}-${slug(name)}-${index + 1}`, name, side, depth: 3, notes: "",
+    const positions = ["Offense", "Defense"].flatMap((side) => positionDefaults[side].map((name, index) => ({
+      id: `${slug(side)}-${slug(name)}-${index + 1}`, name, side, unit: "", depth: 3, notes: "",
     })));
-    return { version: 2, roster, positions, assignments: {}, selectedView: "All", layoutMode: "list", fieldLayout: {} };
+    SPECIAL_UNITS.forEach((unit) => specialTeamDefaults[unit].forEach((name, index) => positions.push({
+      id: `special-${slug(unit)}-${slug(name)}-${index + 1}`, name, side: "Special Teams", unit, depth: 3, notes: "",
+    })));
+    return { version: 3, roster, positions, assignments: {}, selectedView: "All", selectedSpecialUnit: "Punt", layoutMode: "list", fieldLayout: {} };
   }
   function sanitize(candidate) {
     if (!candidate || !Array.isArray(candidate.roster) || !Array.isArray(candidate.positions)) return null;
@@ -87,8 +115,16 @@
       let id = String(p.id || makeId("position", name));
       while (positionIds.has(id)) id = makeId("position", name);
       positionIds.add(id);
-      return { id, name, side, depth, notes: String(p.notes ?? "").trim() };
+      return { id, name, side, unit: side === "Special Teams" ? specialUnitValue(p.unit, name) : "", depth, notes: String(p.notes ?? "").trim() };
     }).filter(Boolean);
+    if (Number(candidate.version || 1) < 3) {
+      SPECIAL_UNITS.forEach((unit) => specialTeamDefaults[unit].forEach((name, index) => {
+        if (positions.some((position) => position.side === "Special Teams" && position.unit === unit && position.name === name)) return;
+        let id = `special-${slug(unit)}-${slug(name)}-${index + 1}`;
+        while (positionIds.has(id)) id = makeId("position", `${unit}-${name}`);
+        positionIds.add(id); positions.push({ id, name, side: "Special Teams", unit, depth: 3, notes: "" });
+      }));
+    }
     if (!roster.length || !positions.length) return null;
     const assignments = {};
     positions.forEach((position) => {
@@ -105,8 +141,9 @@
       if (Number.isFinite(x) && Number.isFinite(y)) fieldLayout[position.id] = { x: Math.min(95, Math.max(5, x)), y: Math.min(92, Math.max(8, y)) };
     });
     return {
-      version: 2, roster, positions, assignments,
+      version: 3, roster, positions, assignments,
       selectedView: VIEWS.includes(candidate.selectedView) ? candidate.selectedView : "All",
+      selectedSpecialUnit: SPECIAL_UNIT_VIEWS.includes(candidate.selectedSpecialUnit) ? candidate.selectedSpecialUnit : "Punt",
       layoutMode: candidate.layoutMode === "field" ? "field" : "list",
       fieldLayout,
     };
@@ -143,10 +180,18 @@
   function renderTabs() {
     els.tabs.forEach((tab) => { const active = tab.dataset.view === state.selectedView; tab.classList.toggle("active", active); tab.setAttribute("aria-selected", active); });
     els.layoutButtons.forEach((button) => { const active = button.dataset.layout === state.layoutMode; button.classList.toggle("active", active); button.setAttribute("aria-pressed", active); });
-    els.chartTitle.textContent = state.selectedView === "All" ? "All Positions" : state.selectedView;
+    const special = state.selectedView === "Special Teams";
+    els.specialUnitTabs.hidden = !special;
+    els.specialUnitButtons.forEach((button) => { const active = button.dataset.specialUnit === state.selectedSpecialUnit; button.classList.toggle("active", active); button.setAttribute("aria-selected", active); });
+    els.chartTitle.textContent = state.selectedView === "All" ? "All Positions" : special && state.selectedSpecialUnit !== "All Units" ? `Special Teams · ${state.selectedSpecialUnit}` : state.selectedView;
+  }
+  function positionInCurrentView(position) {
+    if (state.selectedView === "All") return true;
+    if (position.side !== state.selectedView) return false;
+    return position.side !== "Special Teams" || state.selectedSpecialUnit === "All Units" || position.unit === state.selectedSpecialUnit;
   }
   function assignedPlayerIdsForView() {
-    const positions = state.positions.filter((position) => state.selectedView === "All" || position.side === state.selectedView);
+    const positions = state.positions.filter(positionInCurrentView);
     return new Set(positions.flatMap((position) => slots(position).filter(Boolean)));
   }
   function renderRoster() {
@@ -158,12 +203,13 @@
       if (ah && bh && an !== bn) return an - bn; if (ah !== bh) return ah ? -1 : 1; return a.name.localeCompare(b.name);
     }).filter((p) => !query || p.name.toLowerCase().includes(query) || p.jersey.toLowerCase().includes(query));
     els.rosterCount.textContent = `${available.length}/${state.roster.length}`;
+    const poolName = state.selectedView === "Special Teams" && state.selectedSpecialUnit !== "All Units" ? state.selectedSpecialUnit : state.selectedView;
     els.rosterHelp.textContent = state.selectedView === "All"
       ? "Assigned players leave this list. Tap or drag a filled slot to reuse that player elsewhere."
-      : `Assigned ${state.selectedView} players leave this list. Tap or drag a filled slot to reuse them.`;
+      : `Assigned ${poolName} players leave this list. They remain available for the other units.`;
     els.rosterEmpty.textContent = query
       ? "No available players match that search."
-      : `Every player is assigned in the ${state.selectedView === "All" ? "visible chart" : state.selectedView + " pool"}.`;
+      : `Every player is assigned in the ${state.selectedView === "All" ? "visible chart" : poolName + " pool"}.`;
     els.rosterEmpty.hidden = roster.length > 0;
     els.rosterList.innerHTML = roster.map((p) => `<button type="button" draggable="true" class="player${p.id === selectedPlayerId ? " selected" : ""}" data-player-id="${esc(p.id)}" aria-pressed="${p.id === selectedPlayerId}" title="${esc(p.notes || `Select ${p.name}`)}"><span class="jersey${p.jersey ? "" : " blank"}">${esc(p.jersey || "—")}</span><span class="player-name">${esc(p.name)}</span><span class="grip" aria-hidden="true">⋮⋮</span></button>`).join("");
   }
@@ -172,12 +218,21 @@
     if (!chosen) { selectedPlayerId = null; els.selection.hidden = true; return; }
     els.selectedName.textContent = `${chosen.jersey ? `#${chosen.jersey} ` : ""}${chosen.name}`; els.selection.hidden = false;
   }
+  function visibleGroups() {
+    const groups = [];
+    if (state.selectedView === "All" || state.selectedView === "Offense") groups.push({ label: "Offense", side: "Offense", unit: "", positions: state.positions.filter((p) => p.side === "Offense") });
+    if (state.selectedView === "All" || state.selectedView === "Defense") groups.push({ label: "Defense", side: "Defense", unit: "", positions: state.positions.filter((p) => p.side === "Defense") });
+    if (state.selectedView === "All" || state.selectedView === "Special Teams") {
+      const units = state.selectedView === "Special Teams" && state.selectedSpecialUnit !== "All Units" ? [state.selectedSpecialUnit] : SPECIAL_UNITS;
+      units.forEach((unit) => groups.push({ label: unit, side: "Special Teams", unit, positions: state.positions.filter((p) => p.side === "Special Teams" && p.unit === unit) }));
+    }
+    return groups.filter((group) => group.positions.length);
+  }
   function renderPositions() {
     if (state.layoutMode === "field") { renderFieldView(); return; }
-    const visibleSides = state.selectedView === "All" ? SIDES : [state.selectedView];
-    els.groups.innerHTML = visibleSides.map((side) => {
-      const positions = state.positions.filter((p) => p.side === side); if (!positions.length) return "";
-      return `<section class="group" data-side="${esc(side)}" aria-label="${esc(side)} positions"><div class="group-head"><h3>${esc(side)} · ${positions.length}</h3><i class="group-line"></i></div><div class="position-grid">${positions.map((position, index) => card(position, index, positions.length)).join("")}</div></section>`;
+    els.groups.innerHTML = visibleGroups().map((group) => {
+      const positions = group.positions;
+      return `<section class="group" data-side="${esc(group.side)}" data-unit="${esc(group.unit)}" aria-label="${esc(group.label)} positions"><div class="group-head"><h3>${esc(group.label)} · ${positions.length}</h3><i class="group-line"></i></div><div class="position-grid">${positions.map((position, index) => card(position, index, positions.length)).join("")}</div></section>`;
     }).join("") || '<p class="no-positions">No positions in this view yet.</p>';
   }
   function fallbackFieldPoint(index, count) {
@@ -189,7 +244,7 @@
   function fieldPoint(position, sideIndex, sideCount) {
     const saved = state.fieldLayout[position.id];
     if (saved) return saved;
-    const known = fieldDefaults[position.side]?.[position.name];
+    const known = position.side === "Special Teams" ? specialFieldDefaults[position.unit]?.[position.name] : fieldDefaults[position.side]?.[position.name];
     return known ? { x: known[0], y: known[1] } : fallbackFieldPoint(sideIndex, sideCount);
   }
   function fieldMarker(position, sideIndex, sideCount) {
@@ -206,15 +261,14 @@
     return `<article class="print-position"><h4>${esc(position.name)}</h4><ol>${rows}</ol></article>`;
   }
   function renderFieldView() {
-    const visibleSides = state.selectedView === "All" ? SIDES : [state.selectedView];
-    const visiblePositions = state.positions.filter((position) => visibleSides.includes(position.side));
+    const groups = visibleGroups();
+    const visiblePositions = groups.flatMap((group) => group.positions);
     if (!visiblePositions.some((position) => position.id === selectedFieldPositionId)) selectedFieldPositionId = visiblePositions[0]?.id || null;
-    els.groups.innerHTML = visibleSides.map((side) => {
-      const positions = state.positions.filter((position) => position.side === side);
-      if (!positions.length) return "";
+    els.groups.innerHTML = groups.map((group) => {
+      const { side, unit, label, positions } = group;
       const selected = positions.find((position) => position.id === selectedFieldPositionId);
       const selectedIndex = selected ? positions.findIndex((position) => position.id === selected.id) : -1;
-      return `<section class="field-group" data-side="${esc(side)}" aria-label="${esc(side)} field"><div class="group-head"><h3>${esc(side)} · FIELD VIEW</h3><i class="group-line"></i><button type="button" class="reset-field" data-reset-field="${esc(side)}">Reset layout</button></div><p class="field-help">Drag the ✥ handle to place each position. Tap a position to view and edit its depth slots.</p><div class="field-scroll"><div class="football-field" data-field-side="${esc(side)}"><div class="end-zone end-zone-top">${esc(side)}</div><div class="end-zone end-zone-bottom">11U</div><div class="field-midline"><span>50</span></div>${positions.map((position, index) => fieldMarker(position, index, positions.length)).join("")}</div></div><section class="field-print-depth"><h4>${esc(side)} Depth Chart</h4><div>${positions.map(printFieldPosition).join("")}</div></section>${selected ? `<div class="field-detail"><div class="field-detail-head"><small>SELECTED POSITION</small><span>Assign players here or choose another marker above.</span></div><div class="field-detail-card">${card(selected, selectedIndex, positions.length)}</div></div>` : ""}</section>`;
+      return `<section class="field-group" data-side="${esc(side)}" data-unit="${esc(unit)}" aria-label="${esc(label)} field"><div class="group-head"><h3>${esc(label)} · FIELD VIEW</h3><i class="group-line"></i><button type="button" class="reset-field" data-reset-field="${esc(side)}" data-reset-unit="${esc(unit)}">Reset layout</button></div><p class="field-help">Drag the ✥ handle to place each position. Tap a position to view and edit its depth slots.</p><div class="field-scroll"><div class="football-field" data-field-side="${esc(side)}" data-field-unit="${esc(unit)}"><div class="end-zone end-zone-top">${esc(label)}</div><div class="end-zone end-zone-bottom">11U</div><div class="field-midline"><span>50</span></div>${positions.map((position, index) => fieldMarker(position, index, positions.length)).join("")}</div></div><section class="field-print-depth"><h4>${esc(label)} Depth Chart</h4><div>${positions.map(printFieldPosition).join("")}</div></section>${selected ? `<div class="field-detail"><div class="field-detail-head"><small>SELECTED POSITION</small><span>Assign players here or choose another marker above.</span></div><div class="field-detail-card">${card(selected, selectedIndex, positions.length)}</div></div>` : ""}</section>`;
     }).join("") || '<p class="no-positions">No positions in this view yet.</p>';
   }
   function card(position, sideIndex, sideCount) {
@@ -224,7 +278,8 @@
       const reuse = assigned ? `<button type="button" class="reuse-slot" data-reuse-player-id="${esc(assigned.id)}" aria-label="Use ${esc(assigned.name)} again" title="Use ${esc(assigned.name)} at another position">↗</button>` : "";
       return `<div class="slot-row${assigned ? " with-reuse" : ""}"><button type="button" class="slot${assigned ? " filled" : ""}${selectedPlayerId ? " ready" : ""}" data-position-id="${esc(position.id)}" data-depth-index="${index}" ${assigned ? `data-assigned-player-id="${esc(assigned.id)}" draggable="true" title="Select ${esc(assigned.name)} to reuse at another position"` : ""} aria-label="${ordinal(index + 1)} depth for ${esc(position.name)}${assigned ? `, currently ${esc(assigned.name)}; tap to reuse` : ", open"}"><span class="depth">${ordinal(index + 1)}</span>${content}</button>${reuse}<button type="button" class="clear-slot" data-position-id="${esc(position.id)}" data-clear-index="${index}" aria-label="Clear ${ordinal(index + 1)} depth for ${esc(position.name)}" ${assigned ? "" : "disabled"}>×</button></div>`;
     }).join("");
-    return `<article class="position" data-side="${esc(position.side)}" data-position-card-id="${esc(position.id)}"><header class="position-head"><div class="position-title"><h3 title="${esc(position.name)}">${esc(position.name)}</h3><span>${esc(position.side)} · ${position.depth} deep</span></div><div class="position-actions"><button class="move-position" data-move-position="${esc(position.id)}" data-move-direction="-1" aria-label="Move ${esc(position.name)} earlier" title="Move earlier" ${sideIndex === 0 ? "disabled" : ""}>←</button><button class="move-position" data-move-position="${esc(position.id)}" data-move-direction="1" aria-label="Move ${esc(position.name)} later" title="Move later" ${sideIndex === sideCount - 1 ? "disabled" : ""}>→</button><button class="edit" data-edit="${esc(position.id)}" aria-label="Edit ${esc(position.name)}" title="Edit position">✎</button><button class="delete" data-delete="${esc(position.id)}" aria-label="Delete ${esc(position.name)}" title="Delete position">×</button></div></header>${position.notes ? `<p class="position-note">${esc(position.notes)}</p>` : ""}<div class="depth-list">${rows}</div></article>`;
+    const category = position.side === "Special Teams" ? `${position.side} · ${position.unit}` : position.side;
+    return `<article class="position" data-side="${esc(position.side)}" data-unit="${esc(position.unit)}" data-position-card-id="${esc(position.id)}"><header class="position-head"><div class="position-title"><h3 title="${esc(position.name)}">${esc(position.name)}</h3><span>${esc(category)} · ${position.depth} deep</span></div><div class="position-actions"><button class="move-position" data-move-position="${esc(position.id)}" data-move-direction="-1" aria-label="Move ${esc(position.name)} earlier" title="Move earlier" ${sideIndex === 0 ? "disabled" : ""}>←</button><button class="move-position" data-move-position="${esc(position.id)}" data-move-direction="1" aria-label="Move ${esc(position.name)} later" title="Move later" ${sideIndex === sideCount - 1 ? "disabled" : ""}>→</button><button class="edit" data-edit="${esc(position.id)}" aria-label="Edit ${esc(position.name)}" title="Edit position">✎</button><button class="delete" data-delete="${esc(position.id)}" aria-label="Delete ${esc(position.name)}" title="Delete position">×</button></div></header>${position.notes ? `<p class="position-note">${esc(position.notes)}</p>` : ""}<div class="depth-list">${rows}</div></article>`;
   }
   function selectPlayer(id) { selectedPlayerId = selectedPlayerId === id ? null : id; render(); }
   function selectPlayerForReuse(id) {
@@ -245,14 +300,14 @@
   function movePosition(positionId, direction) {
     const position = state.positions.find((item) => item.id === positionId);
     if (!position) return;
-    const sidePositions = state.positions.filter((item) => item.side === position.side);
+    const sidePositions = state.positions.filter((item) => item.side === position.side && item.unit === position.unit);
     const currentIndex = sidePositions.findIndex((item) => item.id === positionId);
     const target = sidePositions[currentIndex + direction];
     if (!target) return;
     const sourceIndex = state.positions.findIndex((item) => item.id === position.id);
     const targetIndex = state.positions.findIndex((item) => item.id === target.id);
     [state.positions[sourceIndex], state.positions[targetIndex]] = [state.positions[targetIndex], state.positions[sourceIndex]];
-    commit(`${position.name} moved ${direction < 0 ? "earlier" : "later"} in ${position.side}.`);
+    commit(`${position.name} moved ${direction < 0 ? "earlier" : "later"} in ${position.unit || position.side}.`);
   }
   function setFieldPoint(positionId, point) {
     state.fieldLayout[positionId] = {
@@ -266,7 +321,7 @@
     const marker = handle.closest(".field-marker"), field = handle.closest(".football-field");
     const position = state.positions.find((item) => item.id === handle.dataset.fieldDrag);
     if (!marker || !field || !position) return;
-    const sidePositions = state.positions.filter((item) => item.side === position.side);
+    const sidePositions = state.positions.filter((item) => item.side === position.side && item.unit === position.unit);
     const point = fieldPoint(position, sidePositions.findIndex((item) => item.id === position.id), sidePositions.length);
     fieldDrag = { pointerId: event.pointerId, position, marker, field, startX: event.clientX, startY: event.clientY, point, moved: false };
     handle.setPointerCapture?.(event.pointerId); marker.classList.add("moving"); event.preventDefault();
@@ -292,27 +347,29 @@
     const handle = event.target.closest("[data-field-drag]");
     if (!handle || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
     const position = state.positions.find((item) => item.id === handle.dataset.fieldDrag); if (!position) return;
-    const sidePositions = state.positions.filter((item) => item.side === position.side);
+    const sidePositions = state.positions.filter((item) => item.side === position.side && item.unit === position.unit);
     const point = fieldPoint(position, sidePositions.findIndex((item) => item.id === position.id), sidePositions.length);
     const step = event.shiftKey ? 5 : 1;
     if (event.key === "ArrowLeft") point.x -= step; if (event.key === "ArrowRight") point.x += step;
     if (event.key === "ArrowUp") point.y -= step; if (event.key === "ArrowDown") point.y += step;
     event.preventDefault(); setFieldPoint(position.id, point); selectedFieldPositionId = position.id; commit(`${position.name} moved on the field.`);
   }
-  function resetField(side) {
-    state.positions.filter((position) => position.side === side).forEach((position) => { delete state.fieldLayout[position.id]; });
-    commit(`${side} field layout reset.`);
+  function resetField(side, unit = "") {
+    state.positions.filter((position) => position.side === side && position.unit === unit).forEach((position) => { delete state.fieldLayout[position.id]; });
+    commit(`${unit || side} field layout reset.`);
   }
   function openDialog(dialog) { dialog.showModal ? dialog.showModal() : dialog.setAttribute("open", ""); }
   function closeDialog(dialog) { dialog.close ? dialog.close() : dialog.removeAttribute("open"); }
   function menu(open = els.toolsMenu.hidden) { els.toolsMenu.hidden = !open; els.toolsButton.setAttribute("aria-expanded", open); }
+  function updatePositionUnitVisibility() { els.positionUnitLabel.hidden = els.positionSide.value !== "Special Teams"; }
   function openAddPosition() {
     els.positionForm.reset(); els.positionId.value = ""; els.positionDepth.value = "3"; els.positionSide.value = state.selectedView === "All" ? "Offense" : state.selectedView;
+    els.positionUnit.value = state.selectedSpecialUnit === "All Units" ? "Punt" : state.selectedSpecialUnit; updatePositionUnitVisibility();
     els.dialogTitle.textContent = "Add Position"; els.savePosition.textContent = "Add Position"; openDialog(els.positionDialog); els.positionName.focus();
   }
   function openEdit(id) {
     const p = state.positions.find((item) => item.id === id); if (!p) return;
-    els.positionId.value = p.id; els.positionName.value = p.name; els.positionSide.value = p.side; els.positionDepth.value = p.depth; els.positionNotes.value = p.notes;
+    els.positionId.value = p.id; els.positionName.value = p.name; els.positionSide.value = p.side; els.positionUnit.value = p.unit || "Punt"; els.positionDepth.value = p.depth; els.positionNotes.value = p.notes; updatePositionUnitVisibility();
     els.dialogTitle.textContent = "Edit Position"; els.savePosition.textContent = "Save Changes"; openDialog(els.positionDialog); els.positionName.focus();
   }
   function download(blob, filename) {
@@ -330,10 +387,10 @@
   function template() {
     if (!hasXlsx()) return;
     const wb = XLSX.utils.book_new();
-    const ps = XLSX.utils.json_to_sheet([{ Position: "QB", Side: "Offense", Depth: 3, Notes: "Example position — edit or replace" }, { Position: "MLB", Side: "Defense", Depth: 3, Notes: "Example position — edit or replace" }, { Position: "KICKER", Side: "Special Teams", Depth: 2, Notes: "Example position — edit or replace" }]);
+    const ps = XLSX.utils.json_to_sheet([{ Position: "QB", Side: "Offense", Unit: "", Depth: 3, Notes: "Example position — edit or replace" }, { Position: "MLB", Side: "Defense", Unit: "", Depth: 3, Notes: "Example position — edit or replace" }, { Position: "KICKER", Side: "Special Teams", Unit: "Kickoff", Depth: 2, Notes: "Example position — edit or replace" }]);
     const rs = XLSX.utils.json_to_sheet([{ "Jersey Number": 12, "Player Name": "Example Player", Notes: "This row is ignored during import" }]);
-    const instructions = [["11U Football Depth Chart Import Template"], [""], ["Positions: use Position, Side, Depth, Notes."], ["Valid Side values: Offense, Defense, Special Teams."], ["Depth is 1 through 6; blank defaults to 3."], ["Valid imported positions replace current positions; names keep their entered spelling."], [""], ["Roster: use Jersey Number, Player Name, Notes."], ["Jersey Number may be blank; Player Name is required."], ["Valid imported players replace the current roster."], ["Blank rows and rows named Example Player are ignored."], ["Assignments clear when roster or positions are replaced."], ["CSV may contain either the Positions or Roster headers."]];
-    const ins = XLSX.utils.aoa_to_sheet(instructions); ps["!cols"] = [{ wch: 22 }, { wch: 18 }, { wch: 10 }, { wch: 38 }]; rs["!cols"] = [{ wch: 16 }, { wch: 28 }, { wch: 38 }]; ins["!cols"] = [{ wch: 100 }];
+    const instructions = [["11U Football Depth Chart Import Template"], [""], ["Positions: use Position, Side, Unit, Depth, Notes."], ["Valid Side values: Offense, Defense, Special Teams."], ["For Special Teams, valid Unit values: Punt, Punt Return, Kickoff, Kick Return, Extra Point."], ["Blank or unrecognized Special Teams Unit values default to Punt."], ["Depth is 1 through 6; blank defaults to 3."], ["Valid imported positions replace current positions; names keep their entered spelling."], [""], ["Roster: use Jersey Number, Player Name, Notes."], ["Jersey Number may be blank; Player Name is required."], ["Valid imported players replace the current roster."], ["Blank rows and rows named Example Player are ignored."], ["Assignments clear when roster or positions are replaced."], ["CSV may contain either the Positions or Roster headers."]];
+    const ins = XLSX.utils.aoa_to_sheet(instructions); ps["!cols"] = [{ wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 38 }]; rs["!cols"] = [{ wch: 16 }, { wch: 28 }, { wch: 38 }]; ins["!cols"] = [{ wch: 110 }];
     XLSX.utils.book_append_sheet(wb, ps, "Positions"); XLSX.utils.book_append_sheet(wb, rs, "Roster"); XLSX.utils.book_append_sheet(wb, ins, "Instructions");
     XLSX.writeFile(wb, "football-depth-chart-import-template.xlsx", { compression: true }); notify("Excel import template downloaded.");
   }
@@ -348,7 +405,7 @@
     return type === "positions" ? (("position" in first && "side" in first) ? rows : null) : (("player name" in first) ? rows : null);
   }
   function parsePositions(rows) {
-    return (rows || []).map((source) => { const row = rowKeys(source), name = String(row.position ?? "").trim(), side = sideValue(row.side), depth = depthValue(row.depth, true); if (!name || name.toLowerCase() === "example player" || !side || !depth) return null; return { id: makeId("position", name), name, side, depth, notes: String(row.notes ?? "").trim() }; }).filter(Boolean);
+    return (rows || []).map((source) => { const row = rowKeys(source), name = String(row.position ?? "").trim(), side = sideValue(row.side), depth = depthValue(row.depth, true); if (!name || name.toLowerCase() === "example player" || !side || !depth) return null; return { id: makeId("position", name), name, side, unit: side === "Special Teams" ? specialUnitValue(row.unit, name) : "", depth, notes: String(row.notes ?? "").trim() }; }).filter(Boolean);
   }
   function parseRoster(rows) {
     return (rows || []).map((source) => { const row = rowKeys(source), name = String(row["player name"] ?? "").trim(); if (!name || name.toLowerCase() === "example player") return null; return { id: makeId("player", name), jersey: String(row["jersey number"] ?? "").trim(), name, notes: String(row.notes ?? "").trim() }; }).filter(Boolean);
@@ -365,6 +422,7 @@
   }
 
   els.tabs.forEach((tab) => tab.addEventListener("click", () => { state.selectedView = tab.dataset.view; selectedFieldPositionId = null; commit(); }));
+  els.specialUnitButtons.forEach((button) => button.addEventListener("click", () => { state.selectedSpecialUnit = button.dataset.specialUnit; selectedPlayerId = null; selectedFieldPositionId = null; commit(); }));
   els.layoutButtons.forEach((button) => button.addEventListener("click", () => { state.layoutMode = button.dataset.layout; selectedFieldPositionId = null; commit(state.layoutMode === "field" ? "Field view opened. Drag positions into place." : "List view opened."); }));
   els.rosterSearch.addEventListener("input", renderRoster);
   els.rosterList.addEventListener("click", (event) => { const target = event.target.closest("[data-player-id]"); if (target) selectPlayer(target.dataset.playerId); });
@@ -392,7 +450,7 @@
     if (marker && !event.target.closest("[data-field-drag]") && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); selectedFieldPositionId = marker.dataset.fieldPositionSelect; renderPositions(); }
   });
   els.groups.addEventListener("click", (event) => {
-    const reset = event.target.closest("[data-reset-field]"); if (reset) { resetField(reset.dataset.resetField); return; }
+    const reset = event.target.closest("[data-reset-field]"); if (reset) { resetField(reset.dataset.resetField, reset.dataset.resetUnit || ""); return; }
     const fieldPosition = event.target.closest("[data-field-position-select]");
     if (fieldPosition) { if (!suppressFieldClick) { selectedFieldPositionId = fieldPosition.dataset.fieldPositionSelect; renderPositions(); } return; }
     const move = event.target.closest("[data-move-position]"); if (move) { movePosition(move.dataset.movePosition, Number(move.dataset.moveDirection)); return; }
@@ -411,12 +469,13 @@
   });
   $("#addPlayerButton").addEventListener("click", () => { els.playerForm.reset(); openDialog(els.playerDialog); els.playerName.focus(); });
   $("#addPositionButton").addEventListener("click", openAddPosition);
+  els.positionSide.addEventListener("change", updatePositionUnitVisibility);
   els.playerForm.addEventListener("submit", (event) => { event.preventDefault(); const name = els.playerName.value.trim(); if (!name) return; state.roster.push({ id: makeId("player", name), jersey: els.playerJersey.value.trim(), name, notes: els.playerNotes.value.trim() }); closeDialog(els.playerDialog); commit(`${name} added to the roster.`); });
   els.positionForm.addEventListener("submit", (event) => {
-    event.preventDefault(); const name = els.positionName.value.trim(), side = sideValue(els.positionSide.value), depth = depthValue(els.positionDepth.value); if (!name || !side || !depth) return;
+    event.preventDefault(); const name = els.positionName.value.trim(), side = sideValue(els.positionSide.value), unit = side === "Special Teams" ? specialUnitValue(els.positionUnit.value, name) : "", depth = depthValue(els.positionDepth.value); if (!name || !side || !depth) return;
     const current = state.positions.find((p) => p.id === els.positionId.value);
-    if (current) { current.name = name; current.side = side; current.depth = depth; current.notes = els.positionNotes.value.trim(); state.assignments[current.id] = Array.from({ length: depth }, (_, i) => state.assignments[current.id]?.[i] || null); closeDialog(els.positionDialog); commit(`${name} updated.`); }
-    else { const position = { id: makeId("position", name), name, side, depth, notes: els.positionNotes.value.trim() }; state.positions.push(position); state.assignments[position.id] = Array(depth).fill(null); closeDialog(els.positionDialog); commit(`${name} added to ${side}.`); }
+    if (current) { current.name = name; current.side = side; current.unit = unit; current.depth = depth; current.notes = els.positionNotes.value.trim(); state.assignments[current.id] = Array.from({ length: depth }, (_, i) => state.assignments[current.id]?.[i] || null); closeDialog(els.positionDialog); commit(`${name} updated.`); }
+    else { const position = { id: makeId("position", name), name, side, unit, depth, notes: els.positionNotes.value.trim() }; state.positions.push(position); state.assignments[position.id] = Array(depth).fill(null); closeDialog(els.positionDialog); commit(`${name} added to ${unit || side}.`); }
   });
   document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(document.getElementById(button.dataset.close))));
   [els.playerDialog, els.positionDialog].forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
