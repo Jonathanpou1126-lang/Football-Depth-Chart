@@ -4,8 +4,8 @@ A fast, single-page coaching board for managing an 11U football depth chart. It 
 
 ## Features
 
-- 22-player starter roster
-- 22 three-deep Offense/Defense positions plus five independent 11-position Special Teams units
+- Blank, private roster and depth chart for each browser/device
+- Optional editable standard templates for Offense, Defense, and five independent Special Teams units
 - Desktop drag-and-drop and phone/tablet tap-to-assign
 - Side-specific available-player pools that hide players already assigned on the current side
 - Earlier/later controls for reordering positions within each side
@@ -20,6 +20,8 @@ A fast, single-page coaching board for managing an 11U football depth chart. It 
 
 Open `index.html` in a current browser, or serve this folder with any static web server. No build or backend is required. The spreadsheet reader in `vendor/` is bundled locally, so spreadsheet data is not uploaded anywhere.
 
+A new visitor starts with a blank roster and no positions. No team names, jersey numbers, or assignments are included in the public app. Build a team by adding players and positions manually, importing a spreadsheet, or choosing **Load Standard Positions** on the welcome card or under **Tools**. The standard templates contain generic football position labels only and can be edited.
+
 Choose **All**, **Offense**, **Defense**, or **Special Teams**. Special Teams has separate tabs for **Punt**, **Punt Return**, **Kickoff**, **Kick Return**, and **Extra Point**, plus an All Units view. On a phone or tablet, tap a player and then tap any open or occupied depth slot. The selected player is visibly highlighted. On desktop, use the same click flow or drag a roster player onto a slot. Use the **×** beside an occupied slot to clear it.
 
 The roster is an available-player pool for the selected view. Once a player is assigned on Offense, that player leaves the Offense list but remains available when you switch to Defense or Special Teams. Each Special Teams unit has its own pool, so assigning a player to Punt does not remove that player from Kickoff or any other unit. To use that player at another position in the same chart, tap the **↗ use again** button beside the player's occupied slot (or tap the occupied slot itself), then tap the additional slot. On desktop, you can also drag the occupied slot onto another position. The first assignment remains in place. In the **All** view, players assigned anywhere are hidden from the available list.
@@ -27,6 +29,8 @@ The roster is an available-player pool for the selected view. Once a player is a
 A player can appear at multiple positions on Offense, Defense, and Special Teams—for example, first team at one position and second team at another. Assigning the same player to another slot within one position moves the player and prevents a duplicate in that single position.
 
 Use **＋** in the Roster panel to add a player. Use **＋ Add Position** to add a position, and use the arrow, edit, or delete controls on each position card to reorder and maintain it. Position order is saved automatically along with all other changes and the selected view.
+
+Each browser stores its own chart. Another coach opening the site does not see your roster, and changes made on one device do not automatically appear on another device. Use **Tools → Export JSON Backup** and **Restore JSON Backup** to copy a chart between devices. To completely clear a device for a different team, choose **Tools → Start New Team** and confirm; export a backup first if the old chart may be needed.
 
 Use **List** for the standard depth-chart cards or **Field** for an on-field coaching board. In Field View, drag the **✥** handle on a position marker to move it. Tap a marker to open all of that position's depth slots below the field, where players can still be assigned, reused, or cleared normally. Each side has its own saved field arrangement and a **Reset layout** button. On a keyboard, focus a marker's move handle and use the arrow keys; hold Shift for a larger move.
 

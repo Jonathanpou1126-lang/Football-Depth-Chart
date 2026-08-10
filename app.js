@@ -5,16 +5,6 @@
   const VIEWS = ["All", ...SIDES];
   const SPECIAL_UNITS = ["Punt", "Punt Return", "Kickoff", "Kick Return", "Extra Point"];
   const SPECIAL_UNIT_VIEWS = ["All Units", ...SPECIAL_UNITS];
-  const rosterDefaults = [
-    ["0", "Dustin Juarez Zarco"], ["1", "Harrison Edwards"], ["2", "Jesiah Baker"],
-    ["3", "Jayden Long"], ["5", "Jackson Owens"], ["6", "Jacob Johnson"],
-    ["7", "Hayes Miller"], ["10", "Gus Bridges"], ["11", "Aaron Rodriguez"],
-    ["13", "Stevie Watkins III"], ["14", "Hayden Hancock"], ["19", "Henry Strickland"],
-    ["21", "Colton Thomason"], ["22", "Ben Burkhalter"], ["23", "Brayden Perpall"],
-    ["30", "Jacob Pou"], ["42", "Trent Pierce"], ["67", "Sawyer Herring"],
-    ["72", "Kavan Atkinson"], ["97", "Baylor Vaughn"], ["99", "Cullen Moore"],
-    ["", "Caden Hurd"],
-  ];
   const positionDefaults = {
     Offense: ["1 Back", "2 Back", "3 Back", "4 Back", "X (RTE)", "Y (LTE)", "LT", "LG", "C", "RG", "RT"],
     Defense: ["LC", "RC", "FS", "SAM", "MIKE", "WILL", "LDE", "LDT", "N", "RDT", "RDE"],
@@ -89,15 +79,17 @@
     const depth = Number.parseInt(String(value), 10);
     return Number.isInteger(depth) && depth >= 1 && depth <= 6 ? depth : null;
   }
-  function defaultState() {
-    const roster = rosterDefaults.map(([jersey, name], index) => ({ id: `player-${index + 1}-${slug(name)}`, jersey, name, notes: "" }));
+  function starterPositions() {
     const positions = ["Offense", "Defense"].flatMap((side) => positionDefaults[side].map((name, index) => ({
       id: `${slug(side)}-${slug(name)}-${index + 1}`, name, side, unit: "", depth: 3, notes: "",
     })));
     SPECIAL_UNITS.forEach((unit) => specialTeamDefaults[unit].forEach((name, index) => positions.push({
       id: `special-${slug(unit)}-${slug(name)}-${index + 1}`, name, side: "Special Teams", unit, depth: 3, notes: "",
     })));
-    return { version: 3, roster, positions, assignments: {}, selectedView: "All", selectedSpecialUnit: "Punt", layoutMode: "list", fieldLayout: {} };
+    return positions;
+  }
+  function defaultState() {
+    return { version: 4, roster: [], positions: [], assignments: {}, selectedView: "All", selectedSpecialUnit: "Punt", layoutMode: "list", fieldLayout: {} };
   }
   function sanitize(candidate) {
     if (!candidate || !Array.isArray(candidate.roster) || !Array.isArray(candidate.positions)) return null;
@@ -125,7 +117,6 @@
         positionIds.add(id); positions.push({ id, name, side: "Special Teams", unit, depth: 3, notes: "" });
       }));
     }
-    if (!roster.length || !positions.length) return null;
     const assignments = {};
     positions.forEach((position) => {
       const source = Array.isArray(candidate.assignments?.[position.id]) ? candidate.assignments[position.id] : [];
@@ -141,7 +132,7 @@
       if (Number.isFinite(x) && Number.isFinite(y)) fieldLayout[position.id] = { x: Math.min(95, Math.max(5, x)), y: Math.min(92, Math.max(8, y)) };
     });
     return {
-      version: 3, roster, positions, assignments,
+      version: 4, roster, positions, assignments,
       selectedView: VIEWS.includes(candidate.selectedView) ? candidate.selectedView : "All",
       selectedSpecialUnit: SPECIAL_UNIT_VIEWS.includes(candidate.selectedSpecialUnit) ? candidate.selectedSpecialUnit : "Punt",
       layoutMode: candidate.layoutMode === "field" ? "field" : "list",
@@ -209,7 +200,9 @@
       : `Assigned ${poolName} players leave this list. They remain available for the other units.`;
     els.rosterEmpty.textContent = query
       ? "No available players match that search."
-      : `Every player is assigned in the ${state.selectedView === "All" ? "visible chart" : poolName + " pool"}.`;
+      : !state.roster.length
+        ? "No players yet. Tap ＋ to add one or import a roster."
+        : `Every player is assigned in the ${state.selectedView === "All" ? "visible chart" : poolName + " pool"}.`;
     els.rosterEmpty.hidden = roster.length > 0;
     els.rosterList.innerHTML = roster.map((p) => `<button type="button" draggable="true" class="player${p.id === selectedPlayerId ? " selected" : ""}" data-player-id="${esc(p.id)}" aria-pressed="${p.id === selectedPlayerId}" title="${esc(p.notes || `Select ${p.name}`)}"><span class="jersey${p.jersey ? "" : " blank"}">${esc(p.jersey || "—")}</span><span class="player-name">${esc(p.name)}</span><span class="grip" aria-hidden="true">⋮⋮</span></button>`).join("");
   }
@@ -228,12 +221,16 @@
     }
     return groups.filter((group) => group.positions.length);
   }
+  function emptyPositionsMarkup() {
+    if (state.positions.length) return '<p class="no-positions">No positions in this view yet. Use ＋ Add Position to create one.</p>';
+    return `<section class="setup-empty"><small>NEW TEAM</small><h3>Build your depth chart</h3><p>Your roster and positions start empty on this device. Add them manually, import a spreadsheet, or load editable standard football positions.</p><div><button type="button" class="btn primary" data-load-standard-positions>Load Standard Positions</button><button type="button" class="btn secondary" data-import-setup>Import Spreadsheet</button></div></section>`;
+  }
   function renderPositions() {
     if (state.layoutMode === "field") { renderFieldView(); return; }
     els.groups.innerHTML = visibleGroups().map((group) => {
       const positions = group.positions;
       return `<section class="group" data-side="${esc(group.side)}" data-unit="${esc(group.unit)}" aria-label="${esc(group.label)} positions"><div class="group-head"><h3>${esc(group.label)} · ${positions.length}</h3><i class="group-line"></i></div><div class="position-grid">${positions.map((position, index) => card(position, index, positions.length)).join("")}</div></section>`;
-    }).join("") || '<p class="no-positions">No positions in this view yet.</p>';
+    }).join("") || emptyPositionsMarkup();
   }
   function fallbackFieldPoint(index, count) {
     const columns = Math.min(5, Math.max(1, count));
@@ -269,7 +266,7 @@
       const selected = positions.find((position) => position.id === selectedFieldPositionId);
       const selectedIndex = selected ? positions.findIndex((position) => position.id === selected.id) : -1;
       return `<section class="field-group" data-side="${esc(side)}" data-unit="${esc(unit)}" aria-label="${esc(label)} field"><div class="group-head"><h3>${esc(label)} · FIELD VIEW</h3><i class="group-line"></i><button type="button" class="reset-field" data-reset-field="${esc(side)}" data-reset-unit="${esc(unit)}">Reset layout</button></div><p class="field-help">Drag the ✥ handle to place each position. Tap a position to view and edit its depth slots.</p><div class="field-scroll"><div class="football-field" data-field-side="${esc(side)}" data-field-unit="${esc(unit)}"><div class="end-zone end-zone-top">${esc(label)}</div><div class="end-zone end-zone-bottom">11U</div><div class="field-midline"><span>50</span></div>${positions.map((position, index) => fieldMarker(position, index, positions.length)).join("")}</div></div><section class="field-print-depth"><h4>${esc(label)} Depth Chart</h4><div>${positions.map(printFieldPosition).join("")}</div></section>${selected ? `<div class="field-detail"><div class="field-detail-head"><small>SELECTED POSITION</small><span>Assign players here or choose another marker above.</span></div><div class="field-detail-card">${card(selected, selectedIndex, positions.length)}</div></div>` : ""}</section>`;
-    }).join("") || '<p class="no-positions">No positions in this view yet.</p>';
+    }).join("") || emptyPositionsMarkup();
   }
   function card(position, sideIndex, sideCount) {
     const rows = slots(position).map((playerId, index) => {
@@ -357,6 +354,17 @@
   function resetField(side, unit = "") {
     state.positions.filter((position) => position.side === side && position.unit === unit).forEach((position) => { delete state.fieldLayout[position.id]; });
     commit(`${unit || side} field layout reset.`);
+  }
+  function loadStandardPositions() {
+    if (state.positions.length && !confirm("Replace every current position and assignment with the standard football position templates? Your roster will remain.")) return;
+    state.positions = starterPositions(); state.assignments = {}; state.fieldLayout = {}; selectedPlayerId = null; selectedFieldPositionId = null;
+    commit("Standard positions loaded. Edit any label to match your system.");
+  }
+  function startNewTeam() {
+    const hasData = state.roster.length || state.positions.length || Object.values(state.assignments).some((list) => Array.isArray(list) && list.some(Boolean));
+    if (!hasData) return notify("This device already has a blank team.");
+    if (!confirm("Start a new blank team on this device? This removes the roster, positions, assignments, and field layouts. Export a JSON backup first if you may need this chart again.")) return;
+    state = defaultState(); selectedPlayerId = null; selectedFieldPositionId = null; els.rosterSearch.value = ""; commit("New blank team ready.");
   }
   function openDialog(dialog) { dialog.showModal ? dialog.showModal() : dialog.setAttribute("open", ""); }
   function closeDialog(dialog) { dialog.close ? dialog.close() : dialog.removeAttribute("open"); }
@@ -450,6 +458,8 @@
     if (marker && !event.target.closest("[data-field-drag]") && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); selectedFieldPositionId = marker.dataset.fieldPositionSelect; renderPositions(); }
   });
   els.groups.addEventListener("click", (event) => {
+    const loadStandard = event.target.closest("[data-load-standard-positions]"); if (loadStandard) { loadStandardPositions(); return; }
+    const setupImport = event.target.closest("[data-import-setup]"); if (setupImport) { els.spreadsheetInput.click(); return; }
     const reset = event.target.closest("[data-reset-field]"); if (reset) { resetField(reset.dataset.resetField, reset.dataset.resetUnit || ""); return; }
     const fieldPosition = event.target.closest("[data-field-position-select]");
     if (fieldPosition) { if (!suppressFieldClick) { selectedFieldPositionId = fieldPosition.dataset.fieldPositionSelect; renderPositions(); } return; }
@@ -481,6 +491,8 @@
   [els.playerDialog, els.positionDialog].forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
   els.toolsButton.addEventListener("click", () => menu()); document.addEventListener("click", (event) => { if (!event.target.closest(".menu-wrap")) menu(false); });
   $("#clearButton").addEventListener("click", () => { menu(false); const any = Object.values(state.assignments).some((list) => Array.isArray(list) && list.some(Boolean)); if (!any) return notify("There are no assignments to clear."); if (confirm("Clear every player assignment? Your roster and positions will stay in place.")) { state.assignments = {}; selectedPlayerId = null; commit("All assignments cleared."); } });
+  $("#loadPositionsButton").addEventListener("click", () => { menu(false); loadStandardPositions(); });
+  $("#newTeamButton").addEventListener("click", () => { menu(false); startNewTeam(); });
   function printChart() { menu(false); window.print(); }
   $("#printButton").addEventListener("click", printChart); $("#quickPrintButton").addEventListener("click", printChart);
   $("#backupExportButton").addEventListener("click", () => { menu(false); exportBackup(); }); $("#backupImportButton").addEventListener("click", () => { menu(false); els.backupInput.click(); });
