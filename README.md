@@ -9,6 +9,7 @@ A fast, single-page coaching board for managing an 11U football depth chart. It 
 - Desktop drag-and-drop and phone/tablet tap-to-assign
 - Side-specific available-player pools that hide players already assigned on the current side
 - Earlier/later controls for reordering positions within each side
+- List View plus a movable on-field coaching-board view for every side
 - Search, add-player, and add/edit/delete-position controls
 - `.xlsx`, `.xls`, and `.csv` import plus an Excel template download
 - Complete JSON backup and restore
@@ -26,6 +27,8 @@ The roster is an available-player pool for the selected view. Once a player is a
 A player can appear at multiple positions on Offense, Defense, and Special Teams—for example, first team at one position and second team at another. Assigning the same player to another slot within one position moves the player and prevents a duplicate in that single position.
 
 Use **＋** in the Roster panel to add a player. Use **＋ Add Position** to add a position, and use the arrow, edit, or delete controls on each position card to reorder and maintain it. Position order is saved automatically along with all other changes and the selected view.
+
+Use **List** for the standard depth-chart cards or **Field** for an on-field coaching board. In Field View, drag the **✥** handle on a position marker to move it. Tap a marker to open all of that position's depth slots below the field, where players can still be assigned, reused, or cleared normally. Each side has its own saved field arrangement and a **Reset layout** button. On a keyboard, focus a marker's move handle and use the arrow keys; hold Shift for a larger move.
 
 ## Spreadsheet import
 
@@ -61,7 +64,7 @@ Choose **Tools → Download Template** for an `.xlsx` workbook with Positions, R
 
 ## Backup, restore, and print
 
-**Tools → Export JSON Backup** downloads roster, positions, assignments, and selected view. **Restore JSON Backup** validates and restores that full state. Use a backup to move the chart to another browser or device.
+**Tools → Export JSON Backup** downloads roster, positions, assignments, selected side, List/Field choice, and saved field arrangements. **Restore JSON Backup** validates and restores that full state. Use a backup to move the chart to another browser or device.
 
 Select the desired view and choose **Tools → Print Depth Chart**. Controls and the roster are removed from the landscape print/PDF layout.
 
@@ -79,3 +82,7 @@ If Pages is not enabled:
 Expected URL:
 
 <https://Jonathanpou1126-lang.github.io/Football-Depth-Chart/>
+
+Custom domain:
+
+<https://www.footballdepthcharts.com/>

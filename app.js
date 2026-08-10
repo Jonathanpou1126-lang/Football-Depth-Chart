@@ -18,6 +18,17 @@
     Defense: ["LC", "RC", "FS", "SAM", "MIKE", "WILL", "LDE", "LDT", "N", "RDT", "RDE"],
     "Special Teams": ["PUNTER", "PAT", "KO"],
   };
+  const fieldDefaults = {
+    Offense: {
+      "1 Back": [40, 66], "2 Back": [60, 66], "3 Back": [40, 82], "4 Back": [60, 82],
+      "X (RTE)": [10, 39], "Y (LTE)": [90, 39], LT: [20, 48], LG: [35, 48], C: [50, 48], RG: [65, 48], RT: [80, 48],
+    },
+    Defense: {
+      LC: [10, 22], RC: [90, 22], FS: [50, 10], SAM: [30, 36], MIKE: [50, 36], WILL: [70, 36],
+      LDE: [22, 55], LDT: [36, 55], N: [50, 55], RDT: [64, 55], RDE: [78, 55],
+    },
+    "Special Teams": { PUNTER: [50, 72], PAT: [40, 45], KO: [60, 45] },
+  };
   const $ = (selector) => document.querySelector(selector);
   const els = {
     tabs: [...document.querySelectorAll(".tab")], rosterList: $("#rosterList"), rosterCount: $("#rosterCount"),
@@ -29,9 +40,13 @@
     positionId: $("#positionId"), positionName: $("#positionName"), positionSide: $("#positionSide"),
     positionDepth: $("#positionDepth"), positionNotes: $("#positionNotes"), dialogTitle: $("#positionDialogTitle"),
     savePosition: $("#savePositionButton"), spreadsheetInput: $("#spreadsheetInput"), backupInput: $("#backupInput"),
-    toast: $("#toast"),
+    toast: $("#toast"), layoutButtons: [...document.querySelectorAll("[data-layout]")],
   };
   let selectedPlayerId = null;
+  let selectedFieldPositionId = null;
+  let fieldDrag = null;
+  let suppressFieldClick = false;
+  let printLayoutRestore = null;
   let toastTimer;
 
   function slug(value) {
@@ -55,7 +70,7 @@
     const positions = SIDES.flatMap((side) => positionDefaults[side].map((name, index) => ({
       id: `${slug(side)}-${slug(name)}-${index + 1}`, name, side, depth: 3, notes: "",
     })));
-    return { version: 1, roster, positions, assignments: {}, selectedView: "All" };
+    return { version: 2, roster, positions, assignments: {}, selectedView: "All", layoutMode: "list", fieldLayout: {} };
   }
   function sanitize(candidate) {
     if (!candidate || !Array.isArray(candidate.roster) || !Array.isArray(candidate.positions)) return null;
@@ -84,7 +99,18 @@
         const id = source[i]; if (!playerIds.has(id) || seen.has(id)) return null; seen.add(id); return id;
       });
     });
-    return { version: 1, roster, positions, assignments, selectedView: VIEWS.includes(candidate.selectedView) ? candidate.selectedView : "All" };
+    const fieldLayout = {};
+    positions.forEach((position) => {
+      const point = candidate.fieldLayout?.[position.id];
+      const x = Number(point?.x), y = Number(point?.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) fieldLayout[position.id] = { x: Math.min(95, Math.max(5, x)), y: Math.min(92, Math.max(8, y)) };
+    });
+    return {
+      version: 2, roster, positions, assignments,
+      selectedView: VIEWS.includes(candidate.selectedView) ? candidate.selectedView : "All",
+      layoutMode: candidate.layoutMode === "field" ? "field" : "list",
+      fieldLayout,
+    };
   }
   function load() {
     try { return sanitize(JSON.parse(localStorage.getItem(KEY))) || defaultState(); }
@@ -117,6 +143,7 @@
   function render() { renderTabs(); renderRoster(); renderSelection(); renderPositions(); }
   function renderTabs() {
     els.tabs.forEach((tab) => { const active = tab.dataset.view === state.selectedView; tab.classList.toggle("active", active); tab.setAttribute("aria-selected", active); });
+    els.layoutButtons.forEach((button) => { const active = button.dataset.layout === state.layoutMode; button.classList.toggle("active", active); button.setAttribute("aria-pressed", active); });
     els.chartTitle.textContent = state.selectedView === "All" ? "All Positions" : state.selectedView;
   }
   function assignedPlayerIdsForView() {
@@ -147,10 +174,41 @@
     els.selectedName.textContent = `${chosen.jersey ? `#${chosen.jersey} ` : ""}${chosen.name}`; els.selection.hidden = false;
   }
   function renderPositions() {
+    if (state.layoutMode === "field") { renderFieldView(); return; }
     const visibleSides = state.selectedView === "All" ? SIDES : [state.selectedView];
     els.groups.innerHTML = visibleSides.map((side) => {
       const positions = state.positions.filter((p) => p.side === side); if (!positions.length) return "";
       return `<section class="group" data-side="${esc(side)}" aria-label="${esc(side)} positions"><div class="group-head"><h3>${esc(side)} · ${positions.length}</h3><i class="group-line"></i></div><div class="position-grid">${positions.map((position, index) => card(position, index, positions.length)).join("")}</div></section>`;
+    }).join("") || '<p class="no-positions">No positions in this view yet.</p>';
+  }
+  function fallbackFieldPoint(index, count) {
+    const columns = Math.min(5, Math.max(1, count));
+    const rows = Math.ceil(count / columns);
+    const column = index % columns, row = Math.floor(index / columns);
+    return { x: columns === 1 ? 50 : 14 + (72 * column / (columns - 1)), y: rows === 1 ? 50 : 23 + (56 * row / (rows - 1)) };
+  }
+  function fieldPoint(position, sideIndex, sideCount) {
+    const saved = state.fieldLayout[position.id];
+    if (saved) return saved;
+    const known = fieldDefaults[position.side]?.[position.name];
+    return known ? { x: known[0], y: known[1] } : fallbackFieldPoint(sideIndex, sideCount);
+  }
+  function fieldMarker(position, sideIndex, sideCount) {
+    const point = fieldPoint(position, sideIndex, sideCount);
+    const starter = player(slots(position)[0]);
+    const selected = selectedFieldPositionId === position.id;
+    return `<div class="field-marker${selected ? " selected" : ""}" data-side="${esc(position.side)}" data-field-position-select="${esc(position.id)}" style="--field-x:${point.x};--field-y:${point.y}" role="button" tabindex="0" aria-label="${esc(position.name)}${starter ? `, first team ${esc(starter.name)}` : ", open"}. Select to view depth slots."><button type="button" class="field-drag-handle" data-field-drag="${esc(position.id)}" aria-label="Move ${esc(position.name)} on field" title="Drag to move ${esc(position.name)}">✥</button><strong>${esc(position.name)}</strong><span>${starter ? `${starter.jersey ? `#${esc(starter.jersey)} ` : ""}${esc(starter.name)}` : "Open starter"}</span></div>`;
+  }
+  function renderFieldView() {
+    const visibleSides = state.selectedView === "All" ? SIDES : [state.selectedView];
+    const visiblePositions = state.positions.filter((position) => visibleSides.includes(position.side));
+    if (!visiblePositions.some((position) => position.id === selectedFieldPositionId)) selectedFieldPositionId = visiblePositions[0]?.id || null;
+    els.groups.innerHTML = visibleSides.map((side) => {
+      const positions = state.positions.filter((position) => position.side === side);
+      if (!positions.length) return "";
+      const selected = positions.find((position) => position.id === selectedFieldPositionId);
+      const selectedIndex = selected ? positions.findIndex((position) => position.id === selected.id) : -1;
+      return `<section class="field-group" data-side="${esc(side)}" aria-label="${esc(side)} field"><div class="group-head"><h3>${esc(side)} · FIELD VIEW</h3><i class="group-line"></i><button type="button" class="reset-field" data-reset-field="${esc(side)}">Reset layout</button></div><p class="field-help">Drag the ✥ handle to place each position. Tap a position to view and edit its depth slots.</p><div class="field-scroll"><div class="football-field" data-field-side="${esc(side)}"><div class="end-zone end-zone-top">${esc(side)}</div><div class="end-zone end-zone-bottom">11U</div><div class="field-midline"><span>50</span></div>${positions.map((position, index) => fieldMarker(position, index, positions.length)).join("")}</div></div>${selected ? `<div class="field-detail"><div class="field-detail-head"><small>SELECTED POSITION</small><span>Assign players here or choose another marker above.</span></div><div class="field-detail-card">${card(selected, selectedIndex, positions.length)}</div></div>` : ""}</section>`;
     }).join("") || '<p class="no-positions">No positions in this view yet.</p>';
   }
   function card(position, sideIndex, sideCount) {
@@ -190,6 +248,55 @@
     [state.positions[sourceIndex], state.positions[targetIndex]] = [state.positions[targetIndex], state.positions[sourceIndex]];
     commit(`${position.name} moved ${direction < 0 ? "earlier" : "later"} in ${position.side}.`);
   }
+  function setFieldPoint(positionId, point) {
+    state.fieldLayout[positionId] = {
+      x: Math.round(Math.min(95, Math.max(5, point.x)) * 10) / 10,
+      y: Math.round(Math.min(92, Math.max(8, point.y)) * 10) / 10,
+    };
+  }
+  function startFieldDrag(event) {
+    const handle = event.target.closest("[data-field-drag]");
+    if (!handle || event.button > 0) return;
+    const marker = handle.closest(".field-marker"), field = handle.closest(".football-field");
+    const position = state.positions.find((item) => item.id === handle.dataset.fieldDrag);
+    if (!marker || !field || !position) return;
+    const sidePositions = state.positions.filter((item) => item.side === position.side);
+    const point = fieldPoint(position, sidePositions.findIndex((item) => item.id === position.id), sidePositions.length);
+    fieldDrag = { pointerId: event.pointerId, position, marker, field, startX: event.clientX, startY: event.clientY, point, moved: false };
+    handle.setPointerCapture?.(event.pointerId); marker.classList.add("moving"); event.preventDefault();
+  }
+  function moveFieldDrag(event) {
+    if (!fieldDrag || event.pointerId !== fieldDrag.pointerId) return;
+    const rect = fieldDrag.field.getBoundingClientRect();
+    const dx = event.clientX - fieldDrag.startX, dy = event.clientY - fieldDrag.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 4) fieldDrag.moved = true;
+    const point = { x: fieldDrag.point.x + dx / rect.width * 100, y: fieldDrag.point.y + dy / rect.height * 100 };
+    const x = Math.min(95, Math.max(5, point.x)), y = Math.min(92, Math.max(8, point.y));
+    fieldDrag.marker.style.setProperty("--field-x", x); fieldDrag.marker.style.setProperty("--field-y", y);
+    fieldDrag.latest = { x, y }; event.preventDefault();
+  }
+  function endFieldDrag(event) {
+    if (!fieldDrag || event.pointerId !== fieldDrag.pointerId) return;
+    const completed = fieldDrag; fieldDrag = null; completed.marker.classList.remove("moving");
+    if (!completed.moved || !completed.latest) return;
+    setFieldPoint(completed.position.id, completed.latest); selectedFieldPositionId = completed.position.id; suppressFieldClick = true;
+    commit(`${completed.position.name} moved on the field.`); setTimeout(() => { suppressFieldClick = false; }, 0);
+  }
+  function moveFieldByKey(event) {
+    const handle = event.target.closest("[data-field-drag]");
+    if (!handle || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    const position = state.positions.find((item) => item.id === handle.dataset.fieldDrag); if (!position) return;
+    const sidePositions = state.positions.filter((item) => item.side === position.side);
+    const point = fieldPoint(position, sidePositions.findIndex((item) => item.id === position.id), sidePositions.length);
+    const step = event.shiftKey ? 5 : 1;
+    if (event.key === "ArrowLeft") point.x -= step; if (event.key === "ArrowRight") point.x += step;
+    if (event.key === "ArrowUp") point.y -= step; if (event.key === "ArrowDown") point.y += step;
+    event.preventDefault(); setFieldPoint(position.id, point); selectedFieldPositionId = position.id; commit(`${position.name} moved on the field.`);
+  }
+  function resetField(side) {
+    state.positions.filter((position) => position.side === side).forEach((position) => { delete state.fieldLayout[position.id]; });
+    commit(`${side} field layout reset.`);
+  }
   function openDialog(dialog) { dialog.showModal ? dialog.showModal() : dialog.setAttribute("open", ""); }
   function closeDialog(dialog) { dialog.close ? dialog.close() : dialog.removeAttribute("open"); }
   function menu(open = els.toolsMenu.hidden) { els.toolsMenu.hidden = !open; els.toolsButton.setAttribute("aria-expanded", open); }
@@ -210,7 +317,7 @@
     notify("Full JSON backup downloaded.");
   }
   async function restoreBackup(file) {
-    try { const restored = sanitize(JSON.parse(await file.text())); if (!restored) throw new Error("This file is not a valid depth chart backup."); state = restored; selectedPlayerId = null; els.rosterSearch.value = ""; commit("Backup restored successfully."); }
+    try { const restored = sanitize(JSON.parse(await file.text())); if (!restored) throw new Error("This file is not a valid depth chart backup."); state = restored; selectedPlayerId = null; selectedFieldPositionId = null; els.rosterSearch.value = ""; commit("Backup restored successfully."); }
     catch (error) { notify(error.message || "Backup could not be restored.", true); }
   }
   function hasXlsx() { if (globalThis.XLSX) return true; notify("The spreadsheet tool did not load. Refresh and try again.", true); return false; }
@@ -246,12 +353,13 @@
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" }); let pRows = namedRows(workbook, "Positions"), rRows = namedRows(workbook, "Roster");
       if (file.name.toLowerCase().endsWith(".csv")) { pRows ||= csvRows(workbook, "positions"); rRows ||= csvRows(workbook, "roster"); }
       const positions = parsePositions(pRows), roster = parseRoster(rRows); if (!positions.length && !roster.length) throw new Error("No valid Positions or Roster rows were found.");
-      const replaced = []; if (positions.length) { state.positions = positions; state.assignments = {}; replaced.push(`${positions.length} positions`); } if (roster.length) { state.roster = roster; state.assignments = {}; replaced.push(`${roster.length} players`); }
+      const replaced = []; if (positions.length) { state.positions = positions; state.assignments = {}; state.fieldLayout = {}; selectedFieldPositionId = null; replaced.push(`${positions.length} positions`); } if (roster.length) { state.roster = roster; state.assignments = {}; replaced.push(`${roster.length} players`); }
       selectedPlayerId = null; els.rosterSearch.value = ""; commit(`Imported ${replaced.join(" and ")}.`);
     } catch (error) { console.error(error); notify(error.message || "Spreadsheet import failed.", true); }
   }
 
-  els.tabs.forEach((tab) => tab.addEventListener("click", () => { state.selectedView = tab.dataset.view; commit(); }));
+  els.tabs.forEach((tab) => tab.addEventListener("click", () => { state.selectedView = tab.dataset.view; selectedFieldPositionId = null; commit(); }));
+  els.layoutButtons.forEach((button) => button.addEventListener("click", () => { state.layoutMode = button.dataset.layout; selectedFieldPositionId = null; commit(state.layoutMode === "field" ? "Field view opened. Drag positions into place." : "List view opened."); }));
   els.rosterSearch.addEventListener("input", renderRoster);
   els.rosterList.addEventListener("click", (event) => { const target = event.target.closest("[data-player-id]"); if (target) selectPlayer(target.dataset.playerId); });
   $("#cancelSelectionButton").addEventListener("click", () => { selectedPlayerId = null; render(); });
@@ -268,7 +376,19 @@
   els.groups.addEventListener("dragover", (event) => { const target = event.target.closest("[data-depth-index]"); if (!target) return; event.preventDefault(); document.querySelectorAll(".slot.over").forEach((slot) => slot.classList.remove("over")); target.classList.add("over"); if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"; });
   els.groups.addEventListener("dragleave", (event) => event.target.closest("[data-depth-index]")?.classList.remove("over"));
   els.groups.addEventListener("drop", (event) => { const target = event.target.closest("[data-depth-index]"); if (!target || !event.dataTransfer) return; event.preventDefault(); target.classList.remove("over"); assign(target.dataset.positionId, Number(target.dataset.depthIndex), event.dataTransfer.getData("text/plain")); });
+  els.groups.addEventListener("pointerdown", startFieldDrag);
+  els.groups.addEventListener("pointermove", moveFieldDrag);
+  els.groups.addEventListener("pointerup", endFieldDrag);
+  els.groups.addEventListener("pointercancel", endFieldDrag);
+  els.groups.addEventListener("keydown", (event) => {
+    moveFieldByKey(event);
+    const marker = event.target.closest("[data-field-position-select]");
+    if (marker && !event.target.closest("[data-field-drag]") && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); selectedFieldPositionId = marker.dataset.fieldPositionSelect; renderPositions(); }
+  });
   els.groups.addEventListener("click", (event) => {
+    const reset = event.target.closest("[data-reset-field]"); if (reset) { resetField(reset.dataset.resetField); return; }
+    const fieldPosition = event.target.closest("[data-field-position-select]");
+    if (fieldPosition) { if (!suppressFieldClick) { selectedFieldPositionId = fieldPosition.dataset.fieldPositionSelect; renderPositions(); } return; }
     const move = event.target.closest("[data-move-position]"); if (move) { movePosition(move.dataset.movePosition, Number(move.dataset.moveDirection)); return; }
     const reuse = event.target.closest("[data-reuse-player-id]"); if (reuse) { selectPlayerForReuse(reuse.dataset.reusePlayerId); return; }
     const targetSlot = event.target.closest("[data-depth-index]");
@@ -281,7 +401,7 @@
     }
     const clear = event.target.closest("[data-clear-index]"); if (clear) { clearSlot(clear.dataset.positionId, Number(clear.dataset.clearIndex)); return; }
     const edit = event.target.closest("[data-edit]"); if (edit) { openEdit(edit.dataset.edit); return; }
-    const del = event.target.closest("[data-delete]"); if (del) { const position = state.positions.find((p) => p.id === del.dataset.delete); if (position && confirm(`Delete ${position.name} and its assignments?`)) { state.positions = state.positions.filter((p) => p.id !== position.id); delete state.assignments[position.id]; commit(`${position.name} deleted.`); } }
+    const del = event.target.closest("[data-delete]"); if (del) { const position = state.positions.find((p) => p.id === del.dataset.delete); if (position && confirm(`Delete ${position.name} and its assignments?`)) { state.positions = state.positions.filter((p) => p.id !== position.id); delete state.assignments[position.id]; delete state.fieldLayout[position.id]; if (selectedFieldPositionId === position.id) selectedFieldPositionId = null; commit(`${position.name} deleted.`); } }
   });
   $("#addPlayerButton").addEventListener("click", () => { els.playerForm.reset(); openDialog(els.playerDialog); els.playerName.focus(); });
   $("#addPositionButton").addEventListener("click", openAddPosition);
@@ -301,7 +421,9 @@
   $("#templateButton").addEventListener("click", () => { menu(false); template(); }); $("#sheetImportButton").addEventListener("click", () => { menu(false); els.spreadsheetInput.click(); });
   els.backupInput.addEventListener("change", async () => { const file = els.backupInput.files[0]; if (file) await restoreBackup(file); els.backupInput.value = ""; });
   els.spreadsheetInput.addEventListener("change", async () => { const file = els.spreadsheetInput.files[0]; if (file) await importSheet(file); els.spreadsheetInput.value = ""; });
-  window.addEventListener("storage", (event) => { if (event.key !== KEY || !event.newValue) return; try { const incoming = sanitize(JSON.parse(event.newValue)); if (incoming) { state = incoming; selectedPlayerId = null; render(); notify("Depth chart refreshed from another tab."); } } catch {} });
-  globalThis.DepthChartApp = { storageKey: KEY, getState: () => structuredClone(state), assign, clearSlot, movePosition, parsePositions, parseRoster, sanitize };
+  window.addEventListener("beforeprint", () => { if (state.layoutMode === "field") { printLayoutRestore = "field"; state.layoutMode = "list"; render(); } });
+  window.addEventListener("afterprint", () => { if (printLayoutRestore) { state.layoutMode = printLayoutRestore; printLayoutRestore = null; render(); } });
+  window.addEventListener("storage", (event) => { if (event.key !== KEY || !event.newValue) return; try { const incoming = sanitize(JSON.parse(event.newValue)); if (incoming) { state = incoming; selectedPlayerId = null; selectedFieldPositionId = null; render(); notify("Depth chart refreshed from another tab."); } } catch {} });
+  globalThis.DepthChartApp = { storageKey: KEY, getState: () => structuredClone(state), assign, clearSlot, movePosition, setFieldPoint, resetField, parsePositions, parseRoster, sanitize };
   save(); render();
 })();
