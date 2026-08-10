@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08120d"><meta name="description" content="A fast, mobile-friendly 11U football depth chart for coaches.">
+  <title>11U Football Depth Chart</title><link rel="stylesheet" href="styles.css?v=20260809-3">
+</head>
+<body>
+  <header class="topbar"><div class="brand"><span class="ball">11U</span><div><small>COACHING BOARD</small><h1>Football Depth Chart</h1></div></div><p class="saved"><i></i><span>Saved on this device</span></p></header>
+  <main class="shell">
+    <nav class="toolbar" aria-label="Depth chart controls">
+      <div class="tabs" role="tablist" aria-label="Depth chart view"><button class="tab active" data-view="All" role="tab" aria-selected="true">All</button><button class="tab" data-view="Offense" role="tab" aria-selected="false">Offense</button><button class="tab" data-view="Defense" role="tab" aria-selected="false">Defense</button><button class="tab" data-view="Special Teams" role="tab" aria-selected="false">Special Teams</button></div>
+      <div class="menu-wrap"><button class="btn secondary" id="toolsButton" aria-expanded="false">Tools <span>⌄</span></button><div class="menu" id="toolsMenu" hidden><button id="templateButton">Download Template</button><button id="sheetImportButton">Import Spreadsheet</button><button id="backupExportButton">Export JSON Backup</button><button id="backupImportButton">Restore JSON Backup</button><button id="printButton">Print Depth Chart</button><button id="clearButton" class="danger">Clear Assignments</button></div></div>
+    </nav>
+    <div class="workspace">
+      <aside class="panel roster" aria-labelledby="rosterTitle"><div class="panel-head"><div><small>AVAILABLE PLAYERS</small><h2 id="rosterTitle">Roster <b id="rosterCount">22</b></h2></div><button class="square" id="addPlayerButton" aria-label="Add player">＋</button></div><label class="search"><span>⌕</span><input id="rosterSearch" type="search" placeholder="Search name or jersey…" autocomplete="off"></label><p class="help" id="rosterHelp">Assigned players leave this list for the current view.</p><div id="rosterList" class="roster-list"></div><p id="rosterEmpty" class="empty" hidden>No players match that search.</p></aside>
+      <section class="panel chart" aria-labelledby="chartTitle"><div class="chart-head"><div><small>DEPTH CHART</small><h2 id="chartTitle">All Positions</h2></div><button class="btn primary" id="addPositionButton">＋ Add Position</button></div><div id="selectionBanner" class="selection" hidden><span>Selected: <strong id="selectedPlayerName"></strong><em>Tap another slot to add this player there too.</em></span><button id="cancelSelectionButton">Cancel</button></div><div id="positionGroups"></div></section>
+    </div>
+  </main>
+  <dialog id="playerDialog" class="modal"><form id="playerForm"><div class="modal-head"><div><small>ROSTER</small><h2>Add Player</h2></div><button type="button" class="close" data-close="playerDialog" aria-label="Close">×</button></div><label>Player name <em>*</em><input id="playerName" required maxlength="80" autocomplete="off"></label><label>Jersey number<input id="playerJersey" maxlength="8" inputmode="numeric" autocomplete="off"></label><label>Notes<textarea id="playerNotes" rows="3" maxlength="300"></textarea></label><div class="modal-actions"><button type="button" class="btn secondary" data-close="playerDialog">Cancel</button><button class="btn primary">Add Player</button></div></form></dialog>
+  <dialog id="positionDialog" class="modal"><form id="positionForm"><input id="positionId" type="hidden"><div class="modal-head"><div><small>DEPTH CHART</small><h2 id="positionDialogTitle">Add Position</h2></div><button type="button" class="close" data-close="positionDialog" aria-label="Close">×</button></div><label>Position name <em>*</em><input id="positionName" required maxlength="40" autocomplete="off"></label><label>Side <em>*</em><select id="positionSide"><option>Offense</option><option>Defense</option><option>Special Teams</option></select></label><label>Depth<select id="positionDepth"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select></label><label>Notes<textarea id="positionNotes" rows="3" maxlength="300"></textarea></label><div class="modal-actions"><button type="button" class="btn secondary" data-close="positionDialog">Cancel</button><button class="btn primary" id="savePositionButton">Add Position</button></div></form></dialog>
+  <input id="spreadsheetInput" type="file" accept=".xlsx,.xls,.csv" hidden><input id="backupInput" type="file" accept="application/json,.json" hidden><div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="vendor/xlsx.full.min.js"></script><script src="app.js?v=20260809-3"></script>
+</body>
+</html>
