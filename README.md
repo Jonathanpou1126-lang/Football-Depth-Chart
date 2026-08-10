@@ -66,7 +66,7 @@ Choose **Tools → Download Template** for an `.xlsx` workbook with Positions, R
 
 **Tools → Export JSON Backup** downloads roster, positions, assignments, selected side, List/Field choice, and saved field arrangements. **Restore JSON Backup** validates and restores that full state. Use a backup to move the chart to another browser or device.
 
-Select the desired view and choose **Tools → Print Depth Chart**. Controls and the roster are removed from the landscape print/PDF layout.
+Select the desired side and choose the visible **Print** button or **Tools → Print Depth Chart**. Printing follows the selected layout. List View prints the traditional full depth chart. Field View prints the on-field formation followed by a compact 1st-through-6th depth list for every position. Controls and the roster are removed automatically, and **All** prints each side on its own landscape page. The browser's print window can send the chart to a printer or save it as a PDF.
 
 ## GitHub Pages
 

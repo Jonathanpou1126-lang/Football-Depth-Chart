@@ -46,7 +46,6 @@
   let selectedFieldPositionId = null;
   let fieldDrag = null;
   let suppressFieldClick = false;
-  let printLayoutRestore = null;
   let toastTimer;
 
   function slug(value) {
@@ -199,6 +198,13 @@
     const selected = selectedFieldPositionId === position.id;
     return `<div class="field-marker${selected ? " selected" : ""}" data-side="${esc(position.side)}" data-field-position-select="${esc(position.id)}" style="--field-x:${point.x};--field-y:${point.y}" role="button" tabindex="0" aria-label="${esc(position.name)}${starter ? `, first team ${esc(starter.name)}` : ", open"}. Select to view depth slots."><button type="button" class="field-drag-handle" data-field-drag="${esc(position.id)}" aria-label="Move ${esc(position.name)} on field" title="Drag to move ${esc(position.name)}">✥</button><strong>${esc(position.name)}</strong><span>${starter ? `${starter.jersey ? `#${esc(starter.jersey)} ` : ""}${esc(starter.name)}` : "Open starter"}</span></div>`;
   }
+  function printFieldPosition(position) {
+    const rows = slots(position).map((playerId, index) => {
+      const assigned = player(playerId);
+      return `<li><b>${ordinal(index + 1)}</b><span>${assigned ? `${assigned.jersey ? `#${esc(assigned.jersey)} ` : ""}${esc(assigned.name)}` : "Open"}</span></li>`;
+    }).join("");
+    return `<article class="print-position"><h4>${esc(position.name)}</h4><ol>${rows}</ol></article>`;
+  }
   function renderFieldView() {
     const visibleSides = state.selectedView === "All" ? SIDES : [state.selectedView];
     const visiblePositions = state.positions.filter((position) => visibleSides.includes(position.side));
@@ -208,7 +214,7 @@
       if (!positions.length) return "";
       const selected = positions.find((position) => position.id === selectedFieldPositionId);
       const selectedIndex = selected ? positions.findIndex((position) => position.id === selected.id) : -1;
-      return `<section class="field-group" data-side="${esc(side)}" aria-label="${esc(side)} field"><div class="group-head"><h3>${esc(side)} · FIELD VIEW</h3><i class="group-line"></i><button type="button" class="reset-field" data-reset-field="${esc(side)}">Reset layout</button></div><p class="field-help">Drag the ✥ handle to place each position. Tap a position to view and edit its depth slots.</p><div class="field-scroll"><div class="football-field" data-field-side="${esc(side)}"><div class="end-zone end-zone-top">${esc(side)}</div><div class="end-zone end-zone-bottom">11U</div><div class="field-midline"><span>50</span></div>${positions.map((position, index) => fieldMarker(position, index, positions.length)).join("")}</div></div>${selected ? `<div class="field-detail"><div class="field-detail-head"><small>SELECTED POSITION</small><span>Assign players here or choose another marker above.</span></div><div class="field-detail-card">${card(selected, selectedIndex, positions.length)}</div></div>` : ""}</section>`;
+      return `<section class="field-group" data-side="${esc(side)}" aria-label="${esc(side)} field"><div class="group-head"><h3>${esc(side)} · FIELD VIEW</h3><i class="group-line"></i><button type="button" class="reset-field" data-reset-field="${esc(side)}">Reset layout</button></div><p class="field-help">Drag the ✥ handle to place each position. Tap a position to view and edit its depth slots.</p><div class="field-scroll"><div class="football-field" data-field-side="${esc(side)}"><div class="end-zone end-zone-top">${esc(side)}</div><div class="end-zone end-zone-bottom">11U</div><div class="field-midline"><span>50</span></div>${positions.map((position, index) => fieldMarker(position, index, positions.length)).join("")}</div></div><section class="field-print-depth"><h4>${esc(side)} Depth Chart</h4><div>${positions.map(printFieldPosition).join("")}</div></section>${selected ? `<div class="field-detail"><div class="field-detail-head"><small>SELECTED POSITION</small><span>Assign players here or choose another marker above.</span></div><div class="field-detail-card">${card(selected, selectedIndex, positions.length)}</div></div>` : ""}</section>`;
     }).join("") || '<p class="no-positions">No positions in this view yet.</p>';
   }
   function card(position, sideIndex, sideCount) {
@@ -416,13 +422,12 @@
   [els.playerDialog, els.positionDialog].forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
   els.toolsButton.addEventListener("click", () => menu()); document.addEventListener("click", (event) => { if (!event.target.closest(".menu-wrap")) menu(false); });
   $("#clearButton").addEventListener("click", () => { menu(false); const any = Object.values(state.assignments).some((list) => Array.isArray(list) && list.some(Boolean)); if (!any) return notify("There are no assignments to clear."); if (confirm("Clear every player assignment? Your roster and positions will stay in place.")) { state.assignments = {}; selectedPlayerId = null; commit("All assignments cleared."); } });
-  $("#printButton").addEventListener("click", () => { menu(false); window.print(); });
+  function printChart() { menu(false); window.print(); }
+  $("#printButton").addEventListener("click", printChart); $("#quickPrintButton").addEventListener("click", printChart);
   $("#backupExportButton").addEventListener("click", () => { menu(false); exportBackup(); }); $("#backupImportButton").addEventListener("click", () => { menu(false); els.backupInput.click(); });
   $("#templateButton").addEventListener("click", () => { menu(false); template(); }); $("#sheetImportButton").addEventListener("click", () => { menu(false); els.spreadsheetInput.click(); });
   els.backupInput.addEventListener("change", async () => { const file = els.backupInput.files[0]; if (file) await restoreBackup(file); els.backupInput.value = ""; });
   els.spreadsheetInput.addEventListener("change", async () => { const file = els.spreadsheetInput.files[0]; if (file) await importSheet(file); els.spreadsheetInput.value = ""; });
-  window.addEventListener("beforeprint", () => { if (state.layoutMode === "field") { printLayoutRestore = "field"; state.layoutMode = "list"; render(); } });
-  window.addEventListener("afterprint", () => { if (printLayoutRestore) { state.layoutMode = printLayoutRestore; printLayoutRestore = null; render(); } });
   window.addEventListener("storage", (event) => { if (event.key !== KEY || !event.newValue) return; try { const incoming = sanitize(JSON.parse(event.newValue)); if (incoming) { state = incoming; selectedPlayerId = null; selectedFieldPositionId = null; render(); notify("Depth chart refreshed from another tab."); } } catch {} });
   globalThis.DepthChartApp = { storageKey: KEY, getState: () => structuredClone(state), assign, clearSlot, movePosition, setFieldPoint, resetField, parsePositions, parseRoster, sanitize };
   save(); render();
